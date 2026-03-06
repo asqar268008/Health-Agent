@@ -1,25 +1,51 @@
 from langchain_community.vectorstores import Chroma
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from health.model import get_embedding, get_model
-from health.models import HealthProfile
+from myapp.model import get_embedding, get_model
+from myapp.models import HealthProfile
+
+import logging
 import traceback
+
+logger = logging.getLogger(__name__)
 
 
 class HealthAgent:
 
-    def __init__(self,
-                 knowledge_dir="health_knowledge/knowledge",
-                 evidence_dir="health_knowledge/evidence"):
+    MAX_CONTEXT = 3000
 
-        self.knowledge_dir = knowledge_dir
-        self.evidence_dir = evidence_dir
+    def __init__(
+        self,
+        knowledge_dir="health_knowledge/knowledge",
+        evidence_dir="health_knowledge/evidence"
+    ):
+        try:
+            embedding = get_embedding()
 
-    # ---------------- PROFILE ----------------
+            # Load vector databases once
+            self.knowledge_db = Chroma(
+                collection_name="knowledge",
+                persist_directory=knowledge_dir,
+                embedding_function=embedding
+            )
+
+            self.evidence_db = Chroma(
+                collection_name="evidence",
+                persist_directory=evidence_dir,
+                embedding_function=embedding
+            )
+
+        except Exception as e:
+            logger.error("Vector DB init error: %s", str(e))
+            traceback.print_exc()
+
+    # ---------------- USER PROFILE ----------------
+
     @staticmethod
     def get_user_health_profile(user):
+
         try:
-            profile = HealthProfile.objects.get(user=user)
+            profile = HealthProfile.objects.select_related("user").get(user=user)
 
             bmi = None
             if profile.height_cm and profile.weight_kg:
@@ -43,31 +69,24 @@ class HealthAgent:
         except HealthProfile.DoesNotExist:
             return None
 
+        except Exception as e:
+            logger.error("Profile fetch error: %s", str(e))
+            traceback.print_exc()
+            return None
+
     # ---------------- RETRIEVE CONTEXT ----------------
+
     def retrieve_context(self, query):
 
         try:
-            embedding = get_embedding()
-
-            knowledge_db = Chroma(
-                collection_name="knowledge",
-                persist_directory=self.knowledge_dir,
-                embedding_function=embedding
-            )
-
-            evidence_db = Chroma(
-                collection_name="evidence",
-                persist_directory=self.evidence_dir,
-                embedding_function=embedding
-            )
 
             docs = []
 
-            docs += knowledge_db.as_retriever(
+            docs += self.knowledge_db.as_retriever(
                 search_kwargs={"k": 2}
             ).invoke(query)
 
-            docs += evidence_db.as_retriever(
+            docs += self.evidence_db.as_retriever(
                 search_kwargs={"k": 2}
             ).invoke(query)
 
@@ -75,31 +94,35 @@ class HealthAgent:
                 doc.page_content for doc in docs
             )
 
-            # 🔥 Limit context to avoid token overflow
-            return combined[:3000]
+            return combined[:self.MAX_CONTEXT]
 
         except Exception as e:
-            print("RAG RETRIEVE ERROR:", str(e))
+            logger.error("RAG retrieval error: %s", str(e))
             traceback.print_exc()
             return ""
 
     # ---------------- BUILD PROMPT ----------------
+
     def build_prompt(self, profile, context):
 
         system_prompt = f"""
-You are a healthcare decision engine.
+You are a healthcare recommendation engine.
 
-STRICT RULES:
-- Output EXACTLY 2 lines.
-- Each line must be a single actionable medical recommendation.
-- No headings.
-- No explanations.
-- No extra words.
+IMPORTANT RULES:
+1. Output EXACTLY two lines.
+2. Each line must contain ONE actionable health recommendation.
+3. No numbering.
+4. No explanations.
+5. No headings.
+6. No extra words.
+
+You are NOT diagnosing diseases.
+Only provide general lifestyle advice.
 
 User Profile:
 Age: {profile['age']}
 Gender: {profile['gender']}
-BMI: {profile['bmi']}
+BMI: {profile['bmi'] or "Unknown"}
 Smoking: {profile['smoking_status']}
 Alcohol: {profile['alcohol_consumption']}
 Exercise: {profile['exercise_frequency']}
@@ -119,7 +142,29 @@ Medical Knowledge:
 
         return prompt
 
+    # ---------------- OUTPUT CLEANING ----------------
+
+    def clean_output(self, decision):
+
+        decision = decision.strip()
+
+        lines = decision.split("\n")
+
+        cleaned = []
+
+        for line in lines:
+            line = line.strip()
+
+            # Remove numbering if model adds it
+            line = line.lstrip("0123456789.- ")
+
+            if line:
+                cleaned.append(line)
+
+        return "\n".join(cleaned[:2])
+
     # ---------------- MAIN DECISION ----------------
+
     def make_decision(self, user, user_message):
 
         profile = self.get_user_health_profile(user)
@@ -128,11 +173,14 @@ Medical Knowledge:
             return "Please complete your health profile first."
 
         try:
-            context = self.retrieve_context(user_message)
+
+            safe_question = user_message[:500]
+
+            context = self.retrieve_context(safe_question)
 
             prompt = self.build_prompt(profile, context)
 
-            llm = get_model()  # fresh LLM every request
+            llm = get_model()
 
             chain = (
                 prompt
@@ -141,12 +189,15 @@ Medical Knowledge:
             )
 
             decision = chain.invoke({
-                "question": user_message
+                "question": safe_question
             })
-            print("RAW DECISION OUTPUT:", decision)
-            return decision.strip()
+
+            logger.info(f"RAW DECISION OUTPUT: {decision}")
+
+            return self.clean_output(decision)
 
         except Exception as e:
-            print("LLM ERROR:", str(e))
+            logger.error("LLM decision error: %s", str(e))
             traceback.print_exc()
+
             return "Unable to generate recommendation. Please try again."

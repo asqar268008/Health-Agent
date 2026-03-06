@@ -819,24 +819,40 @@ function resetForm(){
 ========================= */
 function submitProfile(){
 
-    const height=parseFloat(document.getElementById('height').value);
-    const weight=parseFloat(document.getElementById('weight').value);
-    const sleep=parseFloat(document.getElementById('sleep').value);
+    const data = {
+        height: document.getElementById('height').value,
+        weight: document.getElementById('weight').value,
+        sleep: document.getElementById('sleep').value,
 
-    if(!height||!weight||!sleep){
-        showToast("Please fill required fields","error");
-        return;
-    }
+        smoking: document.querySelector('input[name="smoking"]:checked')?.value,
+        alcohol: document.querySelector('input[name="alcohol"]:checked')?.value,
+        exercise: document.querySelector('input[name="exercise"]:checked')?.value,
+        diet: document.querySelector('input[name="diet"]:checked')?.value,
 
-    const bmi=(weight/((height/100)*(height/100))).toFixed(1);
+        resting_heart_rate: document.getElementById('resting_heart_rate').value,
+        systolic_bp: document.getElementById('systolic_bp').value,
+        diastolic_bp: document.getElementById('diastolic_bp').value,
+        blood_sugar: document.getElementById('blood_sugar').value,
+        cholesterol: document.getElementById('cholesterol').value,
+        vitamin_deficiency: document.getElementById('vitamin_deficiency').value
+    };
 
-    loadDashboard(height,weight,sleep,bmi);
-
-    document.getElementById('profilePage').style.display='none';
-    document.getElementById('dashboardPage').style.display='block';
-    document.getElementById('headerBadge').innerText="Health Dashboard";
-
-    showToast("Profile saved successfully!");
+    fetch("/health/profile/save/",{
+        method:"POST",
+        credentials:"same-origin",
+        headers:{
+            "Content-Type":"application/json"
+        },
+        body:JSON.stringify(data)
+    })
+    .then(res=>res.json())
+    .then(res=>{
+        if(res.status==="saved"){
+            showToast("Profile saved successfully!");
+        }else{
+            showToast("Error saving profile","error");
+        }
+    });
 }
 
 /* =========================
@@ -1124,6 +1140,35 @@ function predictStress(){
     document.getElementById('stressSummaryBadge').style.background=color+"22";
 
     document.getElementById('stressResult').classList.add('show');
+}
+
+function loadProfile(){
+
+    fetch("/health/profile/get/")
+    .then(res=>res.json())
+    .then(data=>{
+
+        if(!data.profile) return;
+
+        const p = data.profile;
+
+        document.getElementById('height').value = p.height || "";
+        document.getElementById('weight').value = p.weight || "";
+        document.getElementById('sleep').value = p.sleep || "";
+
+        if(p.smoking)
+            document.querySelector(`input[name="smoking"][value="${p.smoking}"]`).checked=true;
+
+        if(p.alcohol)
+            document.querySelector(`input[name="alcohol"][value="${p.alcohol}"]`).checked=true;
+
+        if(p.exercise)
+            document.querySelector(`input[name="exercise"][value="${p.exercise}"]`).checked=true;
+
+        if(p.diet)
+            document.querySelector(`input[name="diet"][value="${p.diet}"]`).checked=true;
+
+    });
 }
 
 /* =========================
