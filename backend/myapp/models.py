@@ -213,13 +213,9 @@ class HealthProfile(models.Model):
 
     @property
     def bmi(self):
-
         if self.height_cm and self.weight_kg:
-
             height_m = self.height_cm / 100
-
-            return round(self.weight_kg / (height_m * height_m), 2)
-
+            return round(self.weight_kg / (height_m ** 2), 2)
         return None
 
     def __str__(self):
