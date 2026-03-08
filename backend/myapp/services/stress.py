@@ -3,7 +3,7 @@ import joblib
 import pandas as pd
 from django.conf import settings
 
-MODEL_PATH = os.path.join(settings.BASE_DIR, "health", "services", "stress.pkl")
+MODEL_PATH = os.path.join(settings.BASE_DIR, "myapp", "services", "stress.pkl")
 model = joblib.load(MODEL_PATH)
 
 FEATURE_COLUMNS = ["snr", "rr", "bt", "lm", "bo", "rem", "sh", "hr"]

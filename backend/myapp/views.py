@@ -6,99 +6,91 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from .models import HealthProfile
 from .services.decision import HealthAgent
+from .services.stress import stressService
 from .services.recommendation import get_recommendations
+from django.contrib.auth import get_user_model
 
+User = get_user_model()
 
-# -----------------------------
-# HOME PAGE
-# -----------------------------
 def home(request):
     if request.user.is_authenticated:
         return redirect("/health/")
     return render(request, "index.html")
 
-
-# -----------------------------
-# DASHBOARD PAGE
-# -----------------------------
 @login_required
 def health(request):
     return render(request, "health.html")
 
-
-# -----------------------------
-# SIGNUP API
-# -----------------------------
 @csrf_exempt
 def api_signup(request):
-
     if request.method != "POST":
-        return JsonResponse({"error": "Invalid method"}, status=400)
-
+        return JsonResponse({"success": False, "error": "Invalid method"}, status=400)
     data = json.loads(request.body)
-
-    username = data.get("username")
+    name = data.get("name")
+    email = data.get("email")
     password = data.get("password")
+    confirm_password = data.get("confirm_password")
+    dob = data.get("dob")
+    age = data.get("age")
+    gender = data.get("gender")
 
-    if not username or not password:
-        return JsonResponse({"error": "Missing fields"}, status=400)
+    if not name or not email or not password:
+        return JsonResponse({"success": False, "error": "Missing required fields"}, status=400)
 
-    from django.contrib.auth.models import User
+    if password != confirm_password:
+        return JsonResponse({"success": False, "error": "Passwords do not match"}, status=400)
 
-    if User.objects.filter(username=username).exists():
-        return JsonResponse({"error": "User already exists"}, status=400)
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
 
-    user = User.objects.create_user(username=username, password=password)
+    if User.objects.filter(email=email).exists():
+        return JsonResponse({"success": False, "error": "Email already exists"}, status=400)
+
+    user = User.objects.create_user(
+        email=email,
+        password=password,
+        name=name,
+        dob=dob if dob else None,
+        age=age if age else None,
+        gender=gender if gender else None
+    )
 
     login(request, user)
 
-    return JsonResponse({"status": "created"})
+    return JsonResponse({"success": True})
 
-
-# -----------------------------
-# LOGIN API
-# -----------------------------
 @csrf_exempt
 def api_login(request):
 
     if request.method != "POST":
-        return JsonResponse({"error": "Invalid method"}, status=400)
+        return JsonResponse({"success": False})
 
     data = json.loads(request.body)
 
-    username = data.get("username")
+    email = data.get("email")
     password = data.get("password")
 
-    user = authenticate(request, username=username, password=password)
+    try:
+        user = User.objects.get(email=email)
 
-    if user is None:
-        return JsonResponse({"error": "Invalid credentials"}, status=401)
+        if user.check_password(password):
+            login(request, user)
+            return JsonResponse({"success": True})
+        else:
+            return JsonResponse({"success": False, "error": "Invalid password"})
 
-    login(request, user)
+    except User.DoesNotExist:
+        return JsonResponse({"success": False, "error": "User not found"})
 
-    return JsonResponse({"status": "logged_in"})
-
-
-# -----------------------------
-# LOGOUT
-# -----------------------------
 def logout_view(request):
     logout(request)
     return redirect("/")
 
-
-# -----------------------------
-# AUTH STATUS
-# -----------------------------
 def check_auth_status(request):
     return JsonResponse({
         "authenticated": request.user.is_authenticated
     })
 
-
-# -----------------------------
-# SAVE HEALTH PROFILE
-# -----------------------------
 @login_required
 @csrf_exempt
 def save_health_profile(request):
@@ -112,31 +104,27 @@ def save_health_profile(request):
         user=request.user
     )
 
-    profile.height = data.get("height")
-    profile.weight = data.get("weight")
-    profile.sleep = data.get("sleep")
+    profile.height_cm = data.get("height")
+    profile.weight_kg = data.get("weight")
+    profile.sleep_hours = data.get("sleep")
 
-    profile.smoking = data.get("smoking")
-    profile.alcohol = data.get("alcohol")
-    profile.exercise = data.get("exercise")
-    profile.diet = data.get("diet")
+    profile.smoking_status = data.get("smoking")
+    profile.alcohol_consumption = data.get("alcohol")
+    profile.exercise_frequency = data.get("exercise")
+    profile.diet_type = data.get("diet")
 
     profile.resting_heart_rate = data.get("resting_heart_rate")
     profile.systolic_bp = data.get("systolic_bp")
     profile.diastolic_bp = data.get("diastolic_bp")
 
-    profile.blood_sugar = data.get("blood_sugar")
-    profile.cholesterol = data.get("cholesterol")
+    profile.fasting_blood_sugar = data.get("blood_sugar")
+    profile.total_cholesterol = data.get("cholesterol")
     profile.vitamin_deficiency = data.get("vitamin_deficiency")
 
     profile.save()
 
     return JsonResponse({"status": "saved"})
 
-
-# -----------------------------
-# GET HEALTH PROFILE
-# -----------------------------
 @login_required
 def get_health_profile(request):
 
@@ -144,21 +132,21 @@ def get_health_profile(request):
         profile = HealthProfile.objects.get(user=request.user)
 
         data = {
-            "height": profile.height,
-            "weight": profile.weight,
-            "sleep": profile.sleep,
+            "height": profile.height_cm,
+            "weight": profile.weight_kg,
+            "sleep": profile.sleep_hours,
 
-            "smoking": profile.smoking,
-            "alcohol": profile.alcohol,
-            "exercise": profile.exercise,
-            "diet": profile.diet,
+            "smoking": profile.smoking_status,
+            "alcohol": profile.alcohol_consumption,
+            "exercise": profile.exercise_frequency,
+            "diet": profile.diet_type,
 
             "resting_heart_rate": profile.resting_heart_rate,
             "systolic_bp": profile.systolic_bp,
             "diastolic_bp": profile.diastolic_bp,
 
-            "blood_sugar": profile.blood_sugar,
-            "cholesterol": profile.cholesterol,
+            "blood_sugar": profile.fasting_blood_sugar,
+            "cholesterol": profile.total_cholesterol,
             "vitamin_deficiency": profile.vitamin_deficiency,
         }
 
@@ -167,51 +155,80 @@ def get_health_profile(request):
     except HealthProfile.DoesNotExist:
         return JsonResponse({"profile": None})
 
-
-# -----------------------------
-# AI HEALTH CHAT
-# -----------------------------
 @login_required
 @csrf_exempt
-def health_chat(request):
+def health_decision_agent(request):
 
     if request.method != "POST":
         return JsonResponse({"error": "Invalid method"}, status=400)
 
     data = json.loads(request.body)
+
     user_message = data.get("message")
+
+    if not user_message:
+        return JsonResponse({"error": "Empty message"}, status=400)
 
     try:
         profile = HealthProfile.objects.get(user=request.user)
+
     except HealthProfile.DoesNotExist:
+
         return JsonResponse({
             "reply": "Please complete your health profile first."
         })
 
-    # Prepare health data
-    health_data = {
-        "height": profile.height,
-        "weight": profile.weight,
-        "sleep": profile.sleep,
-        "smoking": profile.smoking,
-        "alcohol": profile.alcohol,
-        "exercise": profile.exercise,
-        "diet": profile.diet,
-        "resting_heart_rate": profile.resting_heart_rate,
-        "systolic_bp": profile.systolic_bp,
-        "diastolic_bp": profile.diastolic_bp,
-        "blood_sugar": profile.blood_sugar,
-        "cholesterol": profile.cholesterol,
-        "vitamin_deficiency": profile.vitamin_deficiency
-    }
-
-    # Run decision agent
     agent = HealthAgent()
-    decision = agent.run(health_data)
 
-    # Generate recommendations
+    decision = agent.make_decision(
+        user=request.user,
+        user_message=user_message
+    )
+
     recommendations = get_recommendations(decision)
 
     return JsonResponse({
-        "reply": recommendations
+
+        "agent": "health_decision",
+
+        "decision": decision,
+
+        "recommendations": recommendations
+
     })
+
+@login_required
+@csrf_exempt
+def stress_prediction_agent(request):
+
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid method"}, status=400)
+
+    data = json.loads(request.body)
+
+    try:
+
+        result = stressService(request.user, data)
+
+        stress_level = result["stress_level"]
+        stress_score = result["stress_score"]
+
+        recommendation = get_recommendations(
+            f"User stress level is {stress_level}"
+        )
+
+        return JsonResponse({
+
+            "agent": "stress_prediction",
+
+            "stress_level": stress_level,
+            "stress_score": stress_score,
+
+            "recommendations": recommendation
+
+        })
+    except Exception as e:
+
+        return JsonResponse({
+            "error": str(e)
+        }, status=400)

@@ -271,6 +271,12 @@
     .field-hint{font-size:.72rem;color:var(--muted-text);margin-top:3px;line-height:1.4}
     .range-hint{display:flex;justify-content:space-between;font-size:.67rem;color:var(--muted-text);margin-top:3px}
     .normal-range{font-size:.68rem;color:#3dd9ac;font-weight:700;margin-top:3px}
+    #stressBar{
+    height:8px;
+    background:#4ade80;
+    width:0%;
+    transition:width 0.6s ease;
+    }
     </style>
 </head>
 <body>
@@ -412,22 +418,24 @@
     <div class="section-body">
 
       <div class="field">
-        <label>Vitamin Deficiency</label>
-        <select id="vitamin_deficiency" onchange="updateProgress()">
-          <option value="">— Select if any deficiency —</option>
-          <option value="none">✅ None / Not Tested</option>
-          <option value="vitamin_d">☀️ Vitamin D</option>
-          <option value="vitamin_b12">🔴 Vitamin B12</option>
-          <option value="iron">🟤 Iron / Anaemia</option>
-          <option value="vitamin_c">🍊 Vitamin C</option>
-          <option value="folate">🌿 Folate / B9</option>
-          <option value="calcium">🦴 Calcium</option>
-          <option value="magnesium">⚡ Magnesium</option>
-          <option value="zinc">🔵 Zinc</option>
-          <option value="multiple">⚠️ Multiple Deficiencies</option>
-        </select>
-        <div class="field-hint">Select the most significant deficiency if diagnosed</div>
+      <label>Vitamin Deficiency</label>
+
+      <div class="checkbox-group">
+        <label><input type="checkbox" name="vitamin_deficiency" value="vitamin_d" onchange="updateProgress()"> ☀️ Vitamin D</label>
+        <label><input type="checkbox" name="vitamin_deficiency" value="vitamin_b12" onchange="updateProgress()"> 🔴 Vitamin B12</label>
+        <label><input type="checkbox" name="vitamin_deficiency" value="iron" onchange="updateProgress()"> 🟤 Iron / Anaemia</label>
+        <label><input type="checkbox" name="vitamin_deficiency" value="vitamin_c" onchange="updateProgress()"> 🍊 Vitamin C</label>
+        <label><input type="checkbox" name="vitamin_deficiency" value="folate" onchange="updateProgress()"> 🌿 Folate / B9</label>
+        <label><input type="checkbox" name="vitamin_deficiency" value="calcium" onchange="updateProgress()"> 🦴 Calcium</label>
+        <label><input type="checkbox" name="vitamin_deficiency" value="magnesium" onchange="updateProgress()"> ⚡ Magnesium</label>
+        <label><input type="checkbox" name="vitamin_deficiency" value="zinc" onchange="updateProgress()"> 🔵 Zinc</label>
+        <label><input type="checkbox" name="vitamin_deficiency" value="none" onchange="updateProgress()"> ✅ None / Not Tested</label>
       </div>
+
+  <div class="field-hint">
+    Select all deficiencies diagnosed in medical tests
+  </div>
+</div>
 
     </div>
   </div>
@@ -717,7 +725,9 @@
             </div>
           </div>
 
-          <button class="predict-btn" id="predictBtn" onclick="predictStress()">⚡ Predict Stress Level</button>
+          <button onclick="predictStress()" class="predict-btn">
+⚡           Predict Stress Level
+          </button>
 
           <div class="stress-result show" id="stressResult">
             <div class="result-row">
@@ -742,13 +752,6 @@
 <div class="toast" id="toast">✅ Profile saved!</div>
 
 <script>
-/* ============================================================
-   HEALTH DASHBOARD – COMPLETE SCRIPT
-   ============================================================ */
-
-/* =========================
-   CSRF TOKEN
-========================= */
 function getCSRFToken() {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
@@ -764,9 +767,6 @@ function getCSRFToken() {
     return cookieValue;
 }
 
-/* =========================
-   TOAST
-========================= */
 function showToast(message, type='success'){
     const t=document.getElementById('toast');
     t.textContent=message;
@@ -779,38 +779,52 @@ function showToast(message, type='success'){
    PROFILE PROGRESS
 ========================= */
 function updateProgress(){
-    // Required core fields (3)
+
     const required=['height','weight','sleep'];
     let filled=0;
+
     required.forEach(id=>{
         if(document.getElementById(id).value) filled++;
     });
-    // Optional bonus fields — count toward progress (max +7 bonus)
-    const optional=['resting_heart_rate','systolic_bp','diastolic_bp','blood_sugar','cholesterol','vitamin_deficiency'];
+
+    const optional=['resting_heart_rate','systolic_bp','diastolic_bp','blood_sugar','cholesterol'];
     let bonus=0;
+
     optional.forEach(id=>{
         const el=document.getElementById(id);
         if(el && el.value) bonus++;
     });
-    // Radio groups
+
+    const vitamins=document.querySelectorAll('input[name="vitamin_deficiency"]:checked');
+    if(vitamins.length>0) bonus++;
+
     const radioGroups=['smoking','alcohol','exercise','diet'];
+
     radioGroups.forEach(name=>{
-        if(document.querySelector('input[name="'+name+'"]:checked')) filled++;
+        if(document.querySelector(`input[name="${name}"]:checked`)){
+            filled++;
+        }
     });
-    // Total: 3 required + 4 radio + 6 optional = 13 fields
-    const total=13;
+
+    const total=14;
     const totalFilled=filled+bonus;
+
     const percent=Math.min(100,Math.round((totalFilled/total)*100));
+
     document.getElementById('progressFill').style.width=percent+'%';
     document.getElementById('progressLabel').innerText=percent+'% Complete';
 }
 
-/* =========================
-   RESET FORM
-========================= */
 function resetForm(){
-    document.querySelectorAll('input').forEach(i=>i.value='');
-    document.querySelectorAll('input[type=radio]').forEach(r=>r.checked=false);
+
+    document.querySelectorAll('input[type="text"], input[type="number"]').forEach(i=>{
+        i.value='';
+    });
+
+    document.querySelectorAll('input[type="radio"], input[type="checkbox"]').forEach(i=>{
+        i.checked=false;
+    });
+
     updateProgress();
 }
 
@@ -819,51 +833,78 @@ function resetForm(){
 ========================= */
 function submitProfile(){
 
-    const data = {
-        height: document.getElementById('height').value,
-        weight: document.getElementById('weight').value,
-        sleep: document.getElementById('sleep').value,
+    const vitaminList=[];
+    document.querySelectorAll('input[name="vitamin_deficiency"]:checked')
+    .forEach(el=>vitaminList.push(el.value));
 
-        smoking: document.querySelector('input[name="smoking"]:checked')?.value,
-        alcohol: document.querySelector('input[name="alcohol"]:checked')?.value,
-        exercise: document.querySelector('input[name="exercise"]:checked')?.value,
-        diet: document.querySelector('input[name="diet"]:checked')?.value,
+    const dietList=[];
+    document.querySelectorAll('input[name="diet"]:checked')
+    .forEach(el=>dietList.push(el.value));
 
-        resting_heart_rate: document.getElementById('resting_heart_rate').value,
-        systolic_bp: document.getElementById('systolic_bp').value,
-        diastolic_bp: document.getElementById('diastolic_bp').value,
-        blood_sugar: document.getElementById('blood_sugar').value,
-        cholesterol: document.getElementById('cholesterol').value,
-        vitamin_deficiency: document.getElementById('vitamin_deficiency').value
+    const data={
+        height:document.getElementById('height').value,
+        weight:document.getElementById('weight').value,
+        sleep:document.getElementById('sleep').value,
+
+        smoking:document.querySelector('input[name="smoking"]:checked')?.value,
+        alcohol:document.querySelector('input[name="alcohol"]:checked')?.value,
+        exercise:document.querySelector('input[name="exercise"]:checked')?.value,
+
+        diet:dietList,
+
+        resting_heart_rate:document.getElementById('resting_heart_rate').value,
+        systolic_bp:document.getElementById('systolic_bp').value,
+        diastolic_bp:document.getElementById('diastolic_bp').value,
+        blood_sugar:document.getElementById('blood_sugar').value,
+        cholesterol:document.getElementById('cholesterol').value,
+
+        vitamin_deficiency:vitaminList
     };
+
+    if(!data.height || !data.weight || !data.sleep){
+        showToast("Please fill required fields","error");
+        return;
+    }
 
     fetch("/health/profile/save/",{
         method:"POST",
         credentials:"same-origin",
         headers:{
-            "Content-Type":"application/json"
+            "Content-Type":"application/json",
+            "X-CSRFToken":getCSRFToken()
         },
         body:JSON.stringify(data)
     })
     .then(res=>res.json())
     .then(res=>{
+
         if(res.status==="saved"){
+
             showToast("Profile saved successfully!");
+
+            setTimeout(()=>{
+              document.getElementById("profilePage").style.display="none";
+              document.getElementById("dashboardPage").style.display="block";
+              loadProfile();
+            },800);
+
         }else{
             showToast("Error saving profile","error");
         }
+
+    })
+    .catch(()=>{
+        showToast("Server error","error");
     });
 }
 
-/* =========================
-   LOAD DASHBOARD DATA
-========================= */
+
 function loadDashboard(height,weight,sleep,bmi){
 
-    /* ── BOX 1: BMI ── */
     document.getElementById('dashBMI').innerText=bmi;
 
     let category,color;
+
     if(bmi<18.5){category="Underweight";color="#3b82f6";}
     else if(bmi<25){category="Normal";color="#10b981";}
     else if(bmi<30){category="Overweight";color="#f59e0b";}
@@ -871,97 +912,48 @@ function loadDashboard(height,weight,sleep,bmi){
 
     document.getElementById('dashBMICat').innerText=category;
     document.getElementById('dashBMICat').style.color=color;
+
     rotateNeedle(bmi);
 
-    /* ── BOX 2: SLEEP ── */
-    const sleepNum = document.getElementById('dashSleep');
-    sleepNum.innerText = sleep;
+    const sleepNum=document.getElementById('dashSleep');
+    sleepNum.innerText=sleep;
 
-    const maxSleep = 10; // ideal max for ring fill
-    const sleepPct = Math.min(1, sleep / maxSleep);
-    const circumference = 2 * Math.PI * 44; // 276.46
-    const arcLen = (sleepPct * circumference).toFixed(2);
-    const arc = document.getElementById('sleepArc');
+    const maxSleep=10;
+    const sleepPct=Math.min(1,sleep/maxSleep);
+    const circumference=2*Math.PI*44;
+    const arcLen=(sleepPct*circumference).toFixed(2);
+    const arc=document.getElementById('sleepArc');
 
-    let sleepColor, sleepLabel, sleepRec;
-    if(sleep < 6){
-        sleepColor="#ef4444"; sleepLabel="Low";
-        sleepRec="Aim for 7–9 hrs. Poor sleep raises stress & BMI risk.";
-    } else if(sleep < 7){
-        sleepColor="#f59e0b"; sleepLabel="Moderate";
-        sleepRec="Getting closer! Try to add 30–60 min more sleep nightly.";
-    } else if(sleep <= 9){
-        sleepColor="#10b981"; sleepLabel="Good";
-        sleepRec="Excellent sleep duration. Keep your schedule consistent.";
-    } else {
-        sleepColor="#a78bfa"; sleepLabel="Excess";
-        sleepRec="Sleeping over 9 hrs may signal fatigue. Check your activity level.";
+    let sleepColor,sleepLabel,sleepRec;
+
+    if(sleep<6){
+        sleepColor="#ef4444";
+        sleepLabel="Low";
+        sleepRec="Aim for 7–9 hrs sleep.";
+    }
+    else if(sleep<7){
+        sleepColor="#f59e0b";
+        sleepLabel="Moderate";
+        sleepRec="Try to sleep earlier.";
+    }
+    else if(sleep<=9){
+        sleepColor="#10b981";
+        sleepLabel="Good";
+        sleepRec="Excellent sleep.";
+    }
+    else{
+        sleepColor="#a78bfa";
+        sleepLabel="Excess";
+        sleepRec="Sleeping too much.";
     }
 
-    arc.setAttribute('stroke-dasharray', arcLen + ' ' + circumference);
-    arc.setAttribute('stroke', sleepColor);
-    document.getElementById('dashSleepStatus').innerText = sleepLabel;
-    document.getElementById('dashSleepStatus').style.color = sleepColor;
-    document.getElementById('sleepStatusDot').style.background = sleepColor;
-    document.getElementById('sleepRec').innerText = sleepRec;
+    arc.setAttribute('stroke-dasharray',arcLen+' '+circumference);
+    arc.setAttribute('stroke',sleepColor);
 
-    /* ── BOX 3: OVERALL PERFORMANCE ── */
-    // BMI score (0-100): best at 22, penalise deviation
-    const bmiVal = parseFloat(bmi);
-    const bmiScore = Math.max(0, Math.round(100 - Math.abs(bmiVal - 22) * 8));
+    document.getElementById('dashSleepStatus').innerText=sleepLabel;
+    document.getElementById('dashSleepStatus').style.color=sleepColor;
 
-    // Sleep score
-    let sleepScore;
-    if(sleep >= 7 && sleep <= 9) sleepScore = 100;
-    else if(sleep >= 6 && sleep < 7) sleepScore = 65;
-    else if(sleep > 9) sleepScore = 70;
-    else sleepScore = Math.round((sleep / 6) * 55);
-
-    // Exercise score from profile radios
-    const exercise = document.querySelector('input[name="exercise"]:checked');
-    const exerciseMap = {none:10, low:40, moderate:75, high:100};
-    const exerciseScore = exercise ? (exerciseMap[exercise.value] || 40) : 40;
-
-    // Lifestyle score (smoking + alcohol)
-    const smoking = document.querySelector('input[name="smoking"]:checked');
-    const alcohol = document.querySelector('input[name="alcohol"]:checked');
-    let lifestyleScore = 100;
-    if(smoking){
-        if(smoking.value==='yes') lifestyleScore -= 40;
-        else if(smoking.value==='former') lifestyleScore -= 10;
-    }
-    if(alcohol){
-        if(alcohol.value==='high') lifestyleScore -= 30;
-        else if(alcohol.value==='moderate') lifestyleScore -= 10;
-    }
-    lifestyleScore = Math.max(0, lifestyleScore);
-
-    const overall = Math.round((bmiScore * 0.3) + (sleepScore * 0.3) + (exerciseScore * 0.25) + (lifestyleScore * 0.15));
-
-    let grade, gradeColor, gradeBg;
-    if(overall >= 85){grade="Excellent";gradeColor="#10b981";gradeBg="rgba(16,185,129,0.12)";}
-    else if(overall >= 70){grade="Good";gradeColor="#3dd9ac";gradeBg="rgba(61,217,172,0.12)";}
-    else if(overall >= 50){grade="Fair";gradeColor="#f59e0b";gradeBg="rgba(245,158,11,0.12)";}
-    else{grade="Needs Work";gradeColor="#ef4444";gradeBg="rgba(239,68,68,0.12)";}
-
-    document.getElementById('perfScoreNum').innerText = overall;
-    document.getElementById('perfScoreNum').style.color = gradeColor;
-    const gradeEl = document.getElementById('perfGrade');
-    gradeEl.innerText = grade;
-    gradeEl.style.color = gradeColor;
-    gradeEl.style.background = gradeBg;
-
-    // progress bars
-    const bars = [
-        {id:'bmi',   score:bmiScore},
-        {id:'sleep', score:sleepScore},
-        {id:'exercise', score:exerciseScore},
-        {id:'lifestyle', score:lifestyleScore}
-    ];
-    bars.forEach(b=>{
-        document.getElementById('pb-'+b.id).style.width = b.score+'%';
-        document.getElementById('pp-'+b.id).innerText = b.score+'%';
-    });
+    document.getElementById('sleepRec').innerText=sleepRec;
 }
 
 /* =========================
@@ -1028,81 +1020,76 @@ function sendMessage(){
 
     const input=document.getElementById('chatInput');
     const text=input.value.trim();
+
     if(!text) return;
 
     input.value='';
 
     const chat=document.getElementById('chatMessages');
-    const empty=chat.querySelector('.chat-empty');
-    if(empty) empty.remove();
 
     chat.innerHTML+=`
-        <div class="msg user">
-            <div class="msg-av user-av">👤</div>
-            <div class="msg-bubble">${escapeHtml(text)}</div>
-        </div>
-    `;
-
-    const typing=document.createElement('div');
-    typing.className='msg bot';
-    typing.innerHTML=`
-        <div class="msg-av bot-av">🤖</div>
-        <div class="msg-bubble">Thinking...</div>
-    `;
-    chat.appendChild(typing);
-    chat.scrollTop=chat.scrollHeight;
+    <div class="msg user">
+        <div class="msg-bubble">${escapeHtml(text)}</div>
+    </div>`;
 
     fetch("/health/chat/",{
         method:"POST",
         credentials:"same-origin",
         headers:{
             "Content-Type":"application/json",
+            "X-CSRFToken":getCSRFToken()
         },
         body:JSON.stringify({message:text})
     })
     .then(res=>res.json())
     .then(data=>{
-        typing.remove();
 
         if(data.error){
             showToast(data.error,"error");
             return;
         }
 
+        const reply=data.decision || data.reply;
+
         chat.innerHTML+=`
-            <div class="msg bot">
-                <div class="msg-av bot-av">🤖</div>
-                <div class="msg-bubble">${escapeHtml(data.decision)}</div>
-            </div>
-        `;
-        chat.scrollTop=chat.scrollHeight;
+        <div class="msg bot">
+            <div class="msg-bubble">${escapeHtml(reply)}</div>
+        </div>`;
 
         updateRecommendations(data.recommendations);
+
     })
     .catch(()=>{
-        typing.remove();
         showToast("Server error","error");
     });
 }
+
 
 /* =========================
    UPDATE RECOMMENDATIONS
 ========================= */
 function updateRecommendations(text){
+
     const div=document.getElementById('recoList');
+
     if(!text){
-        div.innerHTML='<div class="reco-empty">No recommendations yet.</div>';
+        div.innerHTML='<div>No recommendations yet</div>';
         return;
     }
 
     const lines=text.split('\n').filter(l=>l.trim());
-    let html='<ul class="reco-list">';
+
+    let html='<ul>';
+
     lines.forEach(l=>{
         html+=`<li>${escapeHtml(l)}</li>`;
     });
+
     html+='</ul>';
+
     div.innerHTML=html;
 }
+
 
 /* =========================
    STRESS PANEL
@@ -1114,33 +1101,57 @@ function toggleStressPanel(){
 /* =========================
    STRESS PREDICTION
 ========================= */
-function predictStress(){
+async function predictStress(){
 
-    const hr=parseFloat(document.getElementById('sl-hr').value);
-    const sh=parseFloat(document.getElementById('sl-sh').value);
+    const data = {
+        snr: parseFloat(document.getElementById("snr").value),
+        rr: parseFloat(document.getElementById("rr").value),
+        bt: parseFloat(document.getElementById("bt").value),
+        lm: parseFloat(document.getElementById("lm").value),
+        bo: parseFloat(document.getElementById("bo").value),
+        rem: parseFloat(document.getElementById("rem").value),
+        sh: parseFloat(document.getElementById("sh").value),
+        hr: parseFloat(document.getElementById("hr").value)
+    };
 
-    let score=0;
-    score+=Math.max(0,(hr-70)/100)*50;
-    score+=Math.max(0,(7-sh)/7)*50;
+    const response = await fetch("/health/stress/predict/",{
+        method:"POST",
+        headers:{
+            "Content-Type":"application/json",
+            "X-CSRFToken":getCookie("csrftoken")
+        },
+        body:JSON.stringify(data)
+    });
 
-    const pct=Math.min(100,Math.round(score));
+    const result = await response.json();
 
-    let level,color;
-    if(pct<30){level="Low";color="#10b981";}
-    else if(pct<60){level="Moderate";color="#f59e0b";}
-    else{level="High";color="#ef4444";}
+    if(result.error){
+        alert(result.error);
+        return;
+    }
 
-    document.getElementById('resultLevel').innerText=level;
-    document.getElementById('resultLevel').style.color=color;
-    document.getElementById('resultPct').innerText=pct+"%";
-    document.getElementById('resultBarFill').style.width=pct+"%";
+    // update stress text
+    document.getElementById("stressLevel").innerText = result.stress_level;
+    document.getElementById("stressScore").innerText = result.stress_score + "%";
 
-    document.getElementById('stressSummaryBadge').innerText=level+" · "+pct+"%";
-    document.getElementById('stressSummaryBadge').style.color=color;
-    document.getElementById('stressSummaryBadge').style.background=color+"22";
+    // update bar width
+    document.getElementById("stressBar").style.width = result.stress_score + "%";
 
-    document.getElementById('stressResult').classList.add('show');
+    // ⭐ COLOR STRESS LEVELS HERE
+    if(result.stress_level === "High" || result.stress_level === "Severe"){
+        document.getElementById("stressBar").style.background = "#ef4444";
+    }
+    else if(result.stress_level === "Moderate"){
+        document.getElementById("stressBar").style.background = "#f59e0b";
+    }
+    else{
+        document.getElementById("stressBar").style.background = "#22c55e";
+    }
+
+    // recommendations
+    document.getElementById("recommendationsBox").innerText = result.recommendations;
 }
+
 
 function loadProfile(){
 
@@ -1150,37 +1161,66 @@ function loadProfile(){
 
         if(!data.profile) return;
 
-        const p = data.profile;
+        const p=data.profile;
 
-        document.getElementById('height').value = p.height || "";
-        document.getElementById('weight').value = p.weight || "";
-        document.getElementById('sleep').value = p.sleep || "";
+        document.getElementById('height').value=p.height||"";
+        document.getElementById('weight').value=p.weight||"";
+        document.getElementById('sleep').value=p.sleep||"";
 
-        if(p.smoking)
-            document.querySelector(`input[name="smoking"][value="${p.smoking}"]`).checked=true;
+        updateProgress();
 
-        if(p.alcohol)
-            document.querySelector(`input[name="alcohol"][value="${p.alcohol}"]`).checked=true;
+        if(p.height && p.weight){
 
-        if(p.exercise)
-            document.querySelector(`input[name="exercise"][value="${p.exercise}"]`).checked=true;
+            const bmi=(p.weight/((p.height/100)*(p.height/100))).toFixed(1);
 
-        if(p.diet)
-            document.querySelector(`input[name="diet"][value="${p.diet}"]`).checked=true;
+            loadDashboard(p.height,p.weight,p.sleep,bmi);
+            document.getElementById("profilePage").style.display = "none";
+            document.getElementById("dashboardPage").style.display = "block";
+        }
+
+        if(p.vitamin_deficiency){
+
+            let vitamins=p.vitamin_deficiency;
+
+            if(typeof vitamins==="string"){
+                try{
+                    vitamins=JSON.parse(vitamins);
+                }catch{
+                    vitamins=[vitamins];
+                }
+            }
+
+            vitamins.forEach(v=>{
+                const el=document.querySelector(`input[name="vitamin_deficiency"][value="${v}"]`);
+                if(el) el.checked=true;
+            });
+        }
 
     });
 }
 
-/* =========================
-   ESCAPE HTML
-========================= */
 function escapeHtml(s){
+
     return String(s)
         .replace(/&/g,'&amp;')
         .replace(/</g,'&lt;')
         .replace(/>/g,'&gt;')
         .replace(/"/g,'&quot;')
         .replace(/'/g,'&#039;');
+}
+function getCookie(name){
+    let cookieValue = null;
+    if(document.cookie && document.cookie !== ""){
+        const cookies = document.cookie.split(";");
+        for(let i=0;i<cookies.length;i++){
+            const cookie = cookies[i].trim();
+            if(cookie.substring(0,name.length+1) === (name + "=")){
+                cookieValue = decodeURIComponent(cookie.substring(name.length+1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
 }
 </script>
 </body>

@@ -521,84 +521,81 @@
 
   /* ── LOGIN ── */
   async function handleLogin() {
-  const email = document.getElementById('loginEmail').value.trim();
-  const password = document.getElementById('loginPass').value;
-
-  hideMsg('loginError');
-
-  if (!email || !password) {
-    showMsg('loginError', 'Please enter your email and password.');
-    return;
-  }
-
-  try {
-    const res = await fetch('/login/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: email,
-        password: password
-      })
-    });
-
-    const data = await res.json();
-
-    if (data.success) {
-      window.location.href = '/health/';
-    } else {
-      showMsg('loginError', data.error || 'Invalid credentials.');
+    const email = document.getElementById('loginEmail').value.trim();
+    const pass  = document.getElementById('loginPass').value;
+    hideMsg('loginError');
+    if (!email || !pass) { showMsg('loginError', 'Please enter your email and password.'); return; }
+    try {
+      const res  = await fetch('/login/', {  // Updated URL
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: pass })
+      });
+      const data = await res.json();
+      if (data.success) { window.location.href = '/health/'; }
+      else { showMsg('loginError', data.error || 'Invalid credentials.'); }
+    } catch (error) { 
+      console.error('Login error:', error);
+      showMsg('loginError', 'Server error. Please try again.'); 
     }
-
-  } catch (error) {
-    console.error('Login error:', error);
-    showMsg('loginError', 'Server error.');
   }
-}
 
   /* ── SIGN UP ── */
   async function handleSignup() {
-
-    hideMsg('signupError');
-    hideMsg('signupSuccess');
+    hideMsg('signupError'); hideMsg('signupSuccess');
 
     const name    = document.getElementById('signupName').value.trim();
     const email   = document.getElementById('signupEmail').value.trim();
-    const password = document.getElementById('signupPass').value;
-    const confirm_password = document.getElementById('signupConfirm').value;
+    const pass    = document.getElementById('signupPass').value;
+    const confirm = document.getElementById('signupConfirm').value;
     const dob     = document.getElementById('signupDob').value;
     const age     = document.getElementById('signupAge').value;
     const gender  = document.getElementById('signupGender').value;
 
-    try {
+    if (!name || !email || !pass || !confirm || !dob || !gender) {
+      showMsg('signupError', 'Please fill in all required fields.'); return;
+    }
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      showMsg('signupError', 'Please enter a valid email address.'); return;
+    }
+    if (pass !== confirm) {
+      showMsg('signupError', 'Passwords do not match.'); return;
+    }
+    if (pass.length < 8) {
+      showMsg('signupError', 'Password must be at least 8 characters.'); return;
+    }
+    if (!termsAccepted) {
+      showMsg('signupError', 'You must agree to the Terms & Conditions.'); return;
+    }
 
-      const res = await fetch('/signup/', {
+    try {
+      const res  = await fetch('signup/', {  // Updated URL
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: name,
           email: email,
-          password: password,
-          confirm_password: confirm_password,
+          password: pass,
+          confirm_password: confirm,
           dob: dob,
           age: age ? parseInt(age) : null,
           gender: gender
         })
       });
-
       const data = await res.json();
-
       if (data.success) {
-        showMsg('signupSuccess', 'Account created!');
-        setTimeout(() => switchTab('login'), 1500);
+        showMsg('signupSuccess', 'Account created! Redirecting to health page...');
+        setTimeout(() => {
+          window.location.href = '/health/';
+        }, 1600);
       } else {
-        showMsg('signupError', data.error || 'Signup failed.');
+      showMsg('signupError', data.error || 'Something went wrong.');
       }
-
     } catch (error) {
-      console.error(error);
-      showMsg('signupError', 'Server error.');
+      console.error('Signup error:', error);
+      showMsg('signupError', 'Server error. Please try again.'); 
     }
-}
+  }
 
   /* ── FORGOT PASSWORD ── */
   function handleForgot() {
